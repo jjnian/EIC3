@@ -237,7 +237,11 @@
           </div>
           <div class="field">
             <label>API Key</label>
-            <input v-model="configForm.api_key" type="password" class="nexus-input" :placeholder="editingId ? '留空则不修改' : '输入 API Key'" @focus="isApiKeyModified = true" />
+            <input v-model="configForm.api_key" type="password" class="nexus-input" :placeholder="editingId ? '留空则保持原有 Key 不变' : '输入 API Key'" @focus="isApiKeyModified = true" />
+            <p v-if="editingId" class="hint" style="color: var(--neon-amber); font-size: 0.75rem;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              编辑模式下 API Key 不会回显，留空则保持原有密钥不变
+            </p>
           </div>
           <div class="field">
             <label>自定义端点 <span class="optional">(可选)</span></label>
@@ -376,45 +380,33 @@ const saveConfig = async () => {
 
   saving.value = true
   try {
-    // 构建请求数据，明确处理各个字段
-    const data: any = {
-      model_name: configForm.model_name.trim(),
-    }
-
-    // 处理模型ID - 如果为空字符串则发送 null
-    if (configForm.model_id.trim()) {
-      data.model_id = configForm.model_id.trim()
-    } else {
-      data.model_id = null
-    }
-
-    // 编辑模式下，只有当提供了新的 API Key 时才更新
     if (editingId.value) {
+      // ===== 编辑模式 =====
+      const data: any = {
+        model_name: configForm.model_name.trim(),
+        // model_id 和 api_endpoint 始终传递（空字符串转 null，后端会清空该字段）
+        model_id: configForm.model_id.trim() || null,
+        api_endpoint: configForm.api_endpoint.trim() || null,
+      }
+      // api_key 只有填写了新值才传递，留空 = 不修改原有密钥
       if (configForm.api_key.trim()) {
         data.api_key = configForm.api_key.trim()
       }
-      // api_endpoint 可以更新，即使是空值也要传递以便清空
-      if (configForm.api_endpoint !== undefined) {
-        data.api_endpoint = configForm.api_endpoint ? configForm.api_endpoint.trim() : null
-      }
+      await updateAIConfig(editingId.value, data)
+      ElMessage.success('更新成功')
     } else {
-      // 新建模式，必须提供 API Key
+      // ===== 新建模式 =====
       if (!configForm.api_key.trim()) {
         ElMessage.warning('请输入 API Key')
         saving.value = false
         return
       }
-      data.api_key = configForm.api_key.trim()
-
-      if (configForm.api_endpoint?.trim()) {
-        data.api_endpoint = configForm.api_endpoint.trim()
+      const data: any = {
+        model_name: configForm.model_name.trim(),
+        api_key: configForm.api_key.trim(),
+        model_id: configForm.model_id.trim() || null,
+        api_endpoint: configForm.api_endpoint.trim() || null,
       }
-    }
-
-    if (editingId.value) {
-      await updateAIConfig(editingId.value, data)
-      ElMessage.success('更新成功')
-    } else {
       await createAIConfig(data)
       ElMessage.success('添加成功')
     }

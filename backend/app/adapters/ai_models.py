@@ -60,7 +60,7 @@ class ClaudeAdapter(AIModelAdapter):
             })
 
         response = await client.messages.create(
-            model="claude-3-opus-20240229",
+            model=self.model_id or "claude-3-opus-20240229",
             max_tokens=4096,
             messages=messages
         )
@@ -109,7 +109,7 @@ class OpenAIAdapter(AIModelAdapter):
             })
 
         response = await client.chat.completions.create(
-            model="gpt-4-vision-preview",
+            model=self.model_id or "gpt-4o",
             messages=messages,
             max_tokens=4096
         )
@@ -133,18 +133,18 @@ class GeminiAdapter(AIModelAdapter):
         import google.generativeai as genai
 
         genai.configure(api_key=self.api_key)
-        model = genai.GenerativeModel('gemini-pro-vision')
+        model = genai.GenerativeModel(self.model_id or 'gemini-1.5-pro')
 
         if content_type == "text":
             response = await model.generate_content_async(f"{prompt}\n\n内容：\n{content}")
         else:
-            import base64
-            from PIL import Image
-            import io
-            # 解码base64图片
-            image_data = base64.b64decode(content)
-            image = Image.open(io.BytesIO(image_data))
-            response = await model.generate_content_async([prompt, image])
+            # 使用官方支持的字典格式传入 base64，避免使用 PIL
+            mime_type = "image/jpeg" if content_type == "image" else "video/mp4"
+            image_part = {
+                "mime_type": mime_type,
+                "data": content
+            }
+            response = await model.generate_content_async([prompt, image_part])
 
         import json
         text = response.text
@@ -185,7 +185,7 @@ class GLMAdapter(AIModelAdapter):
             })
 
         response = client.chat.completions.create(
-            model="glm-4v",
+            model=self.model_id or "glm-4v",
             messages=messages
         )
 
@@ -202,87 +202,68 @@ class GLMAdapter(AIModelAdapter):
 
 
 class QwenAdapter(AIModelAdapter):
-    """阿里云 Qwen 适配器（支持百炼平台 OpenAI 兼容格式）"""
+    """阿里云 Qwen 适配器（统一使用 OpenAI 兼容格式，支持所有百炼模型）"""
+
+    # 百炼标准兼容端点（未配置自定义端点时使用）
+    DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
     async def analyze(self, content: str, content_type: str, prompt: str) -> Dict[str, Any]:
         import json
+        from openai import AsyncOpenAI
+
+        # 使用自定义端点或默认百炼兼容端点
+        # Coding Plan 专用端点: https://coding.dashscope.aliyuncs.com/v1
+        # 标准端点:             https://dashscope.aliyuncs.com/compatible-mode/v1
+        base_url = self.api_endpoint or self.DEFAULT_ENDPOINT
 
         # 使用配置的模型名称，或默认值
-        model = self.model_id or "qwen-vl-max"
+        # 注意: qwen-coding-plan 是纯文本模型，不支持图片输入
+        model = self.model_id or "qwen-plus"
 
-        # 如果配置了自定义端点，使用 OpenAI 兼容格式
-        if self.api_endpoint:
-            from openai import AsyncOpenAI
+        client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=base_url
+        )
 
-            client = AsyncOpenAI(
-                api_key=self.api_key,
-                base_url=self.api_endpoint
-            )
+        messages = []
+        if content_type == "text":
+            messages.append({
+                "role": "user",
+                "content": f"{prompt}\n\n内容：\n{content}"
+            })
+        else:
+            # 视觉类模型（qwen-vl-max 等）支持图片；纯文本模型会报错
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{content}"}
+                    }
+                ]
+            })
 
-            messages = []
-            if content_type == "text":
-                messages.append({
-                    "role": "user",
-                    "content": f"{prompt}\n\n内容：\n{content}"
-                })
-            else:
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{content}"}
-                        }
-                    ]
-                })
-
+        try:
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=4096
             )
-
             text = response.choices[0].message.content or ""
-        else:
-            # 使用 dashscope SDK
-            import asyncio
-            import dashscope
-            from dashscope import MultiModalConversation
-
-            dashscope.api_key = self.api_key
-
-            messages = []
-            if content_type == "text":
-                messages.append({
-                    "role": "user",
-                    "content": [{"text": f"{prompt}\n\n内容：\n{content}"}]
-                })
-            else:
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {"image": f"data:image/png;base64,{content}"},
-                        {"text": prompt}
-                    ]
-                })
-
-            def _call_api():
-                return MultiModalConversation.call(
-                    model=model,
-                    messages=messages
+        except Exception as e:
+            error_str = str(e)
+            # 提供更友好的错误提示
+            if "model" in error_str.lower() or "404" in error_str:
+                raise Exception(
+                    f"模型 '{model}' 不存在或无访问权限。"
+                    f"请检查模型名称和 API 端点，"
+                    f"Coding Plan 端点: https://coding.dashscope.aliyuncs.com/v1，"
+                    f"标准端点: https://dashscope.aliyuncs.com/compatible-mode/v1"
                 )
-
-            response = await asyncio.to_thread(_call_api)
-
-            if response.status_code != 200:
-                error_msg = response.message if hasattr(response, 'message') else '未知错误'
-                raise Exception(f"Qwen API 错误: {error_msg}")
-
-            try:
-                text = response.output.choices[0].message.content[0]["text"]
-            except (KeyError, IndexError, TypeError) as e:
-                raise Exception(f"Qwen API 响应格式错误: {e}")
+            if "401" in error_str or "Unauthorized" in error_str:
+                raise Exception("API Key 无效或已过期，请检查配置")
+            raise Exception(f"Qwen API 调用失败: {error_str}")
 
         try:
             start = text.find("{")
@@ -306,7 +287,7 @@ class DeepSeekAdapter(AIModelAdapter):
         )
 
         response = await client.chat.completions.create(
-            model="deepseek-chat",
+            model=self.model_id or "deepseek-chat",
             messages=[{
                 "role": "user",
                 "content": f"{prompt}\n\n内容：\n{content}"

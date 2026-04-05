@@ -14,11 +14,14 @@ from app.config import settings
 router = APIRouter(prefix="/analyze", tags=["分析"])
 
 
+from typing import Optional
+
 @router.post("")
 async def analyze_content(
     content: str = Form(""),
-    file_url: str = Form(None),
-    file_type: str = Form(None),
+    file_url: Optional[str] = Form(None),
+    file_type: Optional[str] = Form(None),
+    file_base64: Optional[str] = Form(None),   # 修复：加上 Optional，防 422 报错
     ai_config_id: int = Form(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -35,16 +38,21 @@ async def analyze_content(
 
     # 准备内容
     analysis_content = ""
-    content_type = "text"
+    content_type_final = "text"
 
-    if file_url and file_type:
-        content_type = file_type
-        # 读取文件
+    if file_base64 and file_type:
+        # 前端直接传过来的 base64（图片/视频），不依赖项目系统
+        analysis_content = file_base64
+        content_type_final = file_type
+    elif file_url and file_type:
+        # 通过项目系统上传的文件（兼容旧逻辑）
+        content_type_final = file_type
         file_path = os.path.join(settings.UPLOAD_DIR, os.path.basename(file_url))
         if os.path.exists(file_path):
             with open(file_path, "rb") as f:
                 analysis_content = base64.b64encode(f.read()).decode()
     else:
+        # 纯文本内容
         analysis_content = content
 
     # 调用AI
@@ -55,8 +63,11 @@ async def analyze_content(
         model_id=ai_config.model_id
     )
 
-    prompt = DEFAULT_PROMPT.format(content_type=content_type)
-    result_data = await adapter.analyze(analysis_content, content_type, prompt)
+    prompt = DEFAULT_PROMPT.format(content_type=content_type_final)
+    try:
+        result_data = await adapter.analyze(analysis_content, content_type_final, prompt)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"模型请求失败：{str(e)}")
 
     # 构造返回数据（临时ID）
     entities = []

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from typing import Optional
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import User
@@ -48,6 +50,21 @@ async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+class UserUpdate(BaseModel):
+    nickname: Optional[str] = None
+
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+@router.put("/me", response_model=UserResponse)
+async def update_me(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if user_update.nickname is not None:
+        current_user.nickname = user_update.nickname
+        await db.commit()
+        await db.refresh(current_user)
     return current_user

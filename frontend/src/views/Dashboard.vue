@@ -57,6 +57,14 @@
       <div v-if="activeMenu === 'lineage'" class="lineage-page">
         <header class="page-header">
           <h1>数据血缘</h1>
+          <div class="header-controls">
+            <select v-model="selectedModelId" class="nexus-select" @change="saveSelectedModel">
+              <option :value="null">选择 AI 模型</option>
+              <option v-for="config in aiConfigs" :key="config.id" :value="config.id">
+                {{ config.model_name }}{{ config.model_id ? ' (' + config.model_id + ')' : '' }}
+              </option>
+            </select>
+          </div>
         </header>
 
         <!-- 对话框区域 -->
@@ -184,19 +192,19 @@
           <div class="input-area">
             <div class="input-box glass">
               <div class="input-actions">
-                <button class="action-btn" @click="triggerUpload('image')" title="上传图片">
+                <button class="action-btn" @click="triggerUpload()" title="上传图片">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>
                     <circle cx="8.5" cy="8.5" r="1.5"/>
                     <path d="M21 15l-5-5L5 21"/>
                   </svg>
                 </button>
-                <button class="action-btn" @click="triggerUpload('video')" title="上传视频">
+                <button class="action-btn" @click="triggerUpload()" title="上传视频">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
                 </button>
-                <button class="action-btn" @click="triggerUpload('file')" title="上传文件">
+                <button class="action-btn" @click="triggerUpload()" title="上传文件">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
@@ -242,7 +250,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Graph } from '@antv/x6'
@@ -253,7 +261,7 @@ import { getCurrentUser, type User } from '@/api/auth'
 interface Message {
   id: number
   role: 'user' | 'assistant'
-  content: string
+  content?: string
   file_url?: string
   file_type?: string
   file_name?: string
@@ -319,33 +327,43 @@ const loadAIConfigs = async () => {
 const sendMessage = async () => {
   if (!canSend.value || isAnalyzing.value) return
   if (!selectedModelId.value) {
-    ElMessage.warning('请先选择 AI 模型')
+    ElMessage.warning('请先在页面上方选择 AI 模型')
     return
   }
 
   const userMsg: Message = {
     id: Date.now(),
     role: 'user',
-    content: inputText.value,
+    content: pendingFile.value ? '' : inputText.value,
   }
 
-  // 处理文件上传
+  // 处理文件：直接读取为 base64，不通过项目系统上传
+  let fileBase64 = ''
+  let fileType = ''
+  let fileName = ''
   if (pendingFile.value) {
-    const formData = new FormData()
-    formData.append('file', pendingFile.value)
-    formData.append('project_id', '1')
+    const file = pendingFile.value
+    fileName = file.name
+    fileType = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : 'text'
+
     try {
-      const res = await fetch('/api/data-sources/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-      })
-      const data = await res.json()
-      userMsg.file_url = `/uploads/${data.file_name}`
-      userMsg.file_type = data.type
-      userMsg.file_name = data.file_name
+      // 文本文件直接读内容；图片/视频转 base64
+      if (fileType === 'text') {
+        const text = await file.text()
+        userMsg.content = text
+        userMsg.file_name = fileName
+      } else {
+        const buffer = await file.arrayBuffer()
+        fileBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
+        userMsg.file_type = fileType
+        userMsg.file_name = fileName
+        // 图片创建预览 URL
+        if (fileType === 'image') {
+          userMsg.file_url = URL.createObjectURL(file)
+        }
+      }
     } catch {
-      ElMessage.error('文件上传失败')
+      ElMessage.error('文件读取失败')
       return
     }
     pendingFile.value = null
@@ -359,6 +377,7 @@ const sendMessage = async () => {
   const aiMsg: Message = {
     id: Date.now() + 1,
     role: 'assistant',
+    content: '',
     status: 'analyzing'
   }
   messages.value.push(aiMsg)
@@ -372,8 +391,11 @@ const sendMessage = async () => {
   try {
     const formData = new FormData()
     formData.append('content', userMsg.content || '')
-    if (userMsg.file_url) formData.append('file_url', userMsg.file_url)
-    if (userMsg.file_type) formData.append('file_type', userMsg.file_type)
+    // 如果是非文本文件，将 base64 内容和类型一并发送
+    if (fileBase64) {
+      formData.append('file_base64', fileBase64)
+      formData.append('file_type', fileType)
+    }
     formData.append('ai_config_id', String(selectedModelId.value))
 
     const res = await axios.post('/api/analyze', formData, {
@@ -490,6 +512,12 @@ const handleFileSelect = (e: Event) => {
   if (files?.length) {
     pendingFile.value = files[0]
     inputText.value = `📎 ${files[0].name}`
+  }
+}
+
+const saveSelectedModel = () => {
+  if (selectedModelId.value) {
+    localStorage.setItem('selectedModelId', String(selectedModelId.value))
   }
 }
 

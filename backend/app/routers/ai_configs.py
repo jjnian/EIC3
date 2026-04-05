@@ -39,6 +39,7 @@ async def create_ai_config(
 
 
 @router.put("/{config_id}", response_model=AIConfigResponse)
+@router.patch("/{config_id}", response_model=AIConfigResponse)
 async def update_ai_config(
     config_id: int,
     config_data: AIConfigUpdate,
@@ -52,18 +53,22 @@ async def update_ai_config(
     if not config:
         raise HTTPException(status_code=404, detail="配置不存在")
 
-    # model_name 是必填字段，更新时必须提供
-    if config_data.model_name is not None:
-        config.model_name = config_data.model_name
-    if config_data.model_id is not None:
-        config.model_id = config_data.model_id
-    # 只有当 api_key 明确提供时才更新（前端编辑时留空表示不修改）
-    if config_data.api_key is not None and config_data.api_key != '':
-        config.api_key = config_data.api_key
-    if config_data.api_endpoint is not None:
-        config.api_endpoint = config_data.api_endpoint
-    if config_data.is_active is not None:
-        config.is_active = config_data.is_active
+    # 使用 exclude_unset=True 只处理前端明确传递的字段，兼容所有 Pydantic 版本
+    update_data = config_data.model_dump(exclude_unset=True)
+
+    if 'model_name' in update_data and update_data['model_name'] is not None:
+        config.model_name = update_data['model_name']
+    # model_id 可以是 null（清空）
+    if 'model_id' in update_data:
+        config.model_id = update_data['model_id']
+    # api_key 只有明确提供非空值时才更新（前端编辑留空 = 不修改）
+    if 'api_key' in update_data and update_data['api_key'] is not None and update_data['api_key'] != '':
+        config.api_key = update_data['api_key']
+    # api_endpoint 可以是 null（清空）
+    if 'api_endpoint' in update_data:
+        config.api_endpoint = update_data['api_endpoint']
+    if 'is_active' in update_data:
+        config.is_active = update_data['is_active']
 
     await db.commit()
     await db.refresh(config)
