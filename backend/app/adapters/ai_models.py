@@ -69,14 +69,13 @@ class ClaudeAdapter(AIModelAdapter):
         import json
         text = response.content[0].text
         try:
-            # 尝试提取JSON
             start = text.find("{")
             end = text.rfind("}") + 1
             if start != -1 and end > start:
                 return json.loads(text[start:end])
             return {"entities": [], "relations": []}
-        except:
-            return {"entities": [], "relations": []}
+        except json.JSONDecodeError as e:
+            raise Exception(f"Claude 返回结果无法解析为JSON: {e}\n原始内容: {text[:200]}")
 
 
 class OpenAIAdapter(AIModelAdapter):
@@ -122,8 +121,8 @@ class OpenAIAdapter(AIModelAdapter):
             if start != -1 and end > start:
                 return json.loads(text[start:end])
             return {"entities": [], "relations": []}
-        except:
-            return {"entities": [], "relations": []}
+        except json.JSONDecodeError as e:
+            raise Exception(f"OpenAI 返回结果无法解析为JSON: {e}\n原始内容: {text[:200]}")
 
 
 class GeminiAdapter(AIModelAdapter):
@@ -154,8 +153,8 @@ class GeminiAdapter(AIModelAdapter):
             if start != -1 and end > start:
                 return json.loads(text[start:end])
             return {"entities": [], "relations": []}
-        except:
-            return {"entities": [], "relations": []}
+        except json.JSONDecodeError as e:
+            raise Exception(f"Gemini 返回结果无法解析为JSON: {e}\n原始内容: {text[:200]}")
 
 
 class GLMAdapter(AIModelAdapter):
@@ -197,8 +196,8 @@ class GLMAdapter(AIModelAdapter):
             if start != -1 and end > start:
                 return json.loads(text[start:end])
             return {"entities": [], "relations": []}
-        except:
-            return {"entities": [], "relations": []}
+        except json.JSONDecodeError as e:
+            raise Exception(f"GLM 返回结果无法解析为JSON: {e}\n原始内容: {text[:200]}")
 
 
 class QwenAdapter(AIModelAdapter):
@@ -302,8 +301,8 @@ class DeepSeekAdapter(AIModelAdapter):
             if start != -1 and end > start:
                 return json.loads(text[start:end])
             return {"entities": [], "relations": []}
-        except:
-            return {"entities": [], "relations": []}
+        except json.JSONDecodeError as e:
+            raise Exception(f"DeepSeek 返回结果无法解析为JSON: {e}\n原始内容: {text[:200]}")
 
 
 class LocalModelAdapter(AIModelAdapter):
@@ -343,20 +342,20 @@ def get_adapter(model_name: str, api_key: Optional[str] = None, api_endpoint: Op
     return adapter_class(api_key=api_key, api_endpoint=api_endpoint, model_id=model_id)
 
 
-# 默认提示词模板
+# 默认提示词模板（JSON示例中的大括号需用双括号转义，避免 .format() 误解析）
 DEFAULT_PROMPT = """请分析以下内容，提取其中的实体（本体）和它们之间的关系。
 
 内容类型：{content_type}
 
 请按以下JSON格式返回：
-{
+{{
   "entities": [
-    {"name": "实体名称", "type": "类型", "description": "描述"}
+    {{"name": "实体名称", "type": "类型", "description": "描述"}}
   ],
   "relations": [
-    {"source": "源实体名称", "target": "目标实体名称", "type": "关系类型", "description": "描述"}
+    {{"source": "源实体名称", "target": "目标实体名称", "type": "关系类型", "description": "描述"}}
   ]
-}
+}}
 
 实体类型建议：person(人物)、concept(概念)、process(流程)、object(物体)、event(事件)
 关系类型建议：依赖、包含、导致、关联、属于、产生
