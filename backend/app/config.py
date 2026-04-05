@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # 数据库
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/ontology_flow"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./ontology_flow.db"
 
     # JWT
     SECRET_KEY: str = "your-secret-key-change-in-production"

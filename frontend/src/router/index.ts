@@ -18,7 +18,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Register.vue')
   },
   {
-    path: '/dashboard',
+    path: '/app',
     name: 'Dashboard',
     component: () => import('@/views/Dashboard.vue'),
     meta: { requiresAuth: true }
@@ -27,12 +27,6 @@ const routes: RouteRecordRaw[] = [
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/Settings.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/project/:id',
-    name: 'Project',
-    component: () => import('@/views/Project.vue'),
     meta: { requiresAuth: true }
   }
 ]

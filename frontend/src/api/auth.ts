@@ -32,3 +32,8 @@ export const login = (data: LoginParams) => {
 export const getCurrentUser = () => {
   return api.get<User>('/auth/me')
 }
+
+// 更新用户信息
+export const updateUserInfo = (data: { nickname?: string }) => {
+  return api.put<User>('/auth/me', data)
+}

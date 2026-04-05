@@ -10,6 +10,7 @@ class TaskStatus(str, enum.Enum):
     running = "running"
     completed = "completed"
     failed = "failed"
+    cancelled = "cancelled"
 
 
 class User(Base):
@@ -32,7 +33,8 @@ class AIConfig(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    model_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(50), nullable=False)  # 模型类型: qwen, claude, openai 等
+    model_id: Mapped[str | None] = mapped_column(String(100))  # 实际调用的模型名称: qwen-coding-plan, gpt-4 等
     api_key: Mapped[str | None] = mapped_column(Text)
     api_endpoint: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(default=True)

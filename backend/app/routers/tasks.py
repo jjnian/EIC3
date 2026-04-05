@@ -29,6 +29,10 @@ async def run_analysis(task_id: int, data_source_id: int, ai_config_id: int, db_
             if not task:
                 return
 
+            # 检查是否已取消
+            if task.status == TaskStatus.cancelled:
+                return
+
             task.status = TaskStatus.running
             await db.commit()
 
@@ -62,15 +66,28 @@ async def run_analysis(task_id: int, data_source_id: int, ai_config_id: int, db_
                     with open(data_source.file_path, "rb") as f:
                         content = base64.b64encode(f.read()).decode()
 
+            # 再次检查是否已取消
+            result = await db.execute(select(AnalysisTask).where(AnalysisTask.id == task_id))
+            task = result.scalar_one_or_none()
+            if task and task.status == TaskStatus.cancelled:
+                return
+
             # 调用AI模型
             adapter = get_adapter(
                 ai_config.model_name,
                 api_key=ai_config.api_key,
-                api_endpoint=ai_config.api_endpoint
+                api_endpoint=ai_config.api_endpoint,
+                model_id=ai_config.model_id
             )
 
             prompt = DEFAULT_PROMPT.format(content_type=content_type)
             result_data = await adapter.analyze(content, content_type, prompt)
+
+            # 保存结果前检查是否已取消
+            result = await db.execute(select(AnalysisTask).where(AnalysisTask.id == task_id))
+            task = result.scalar_one_or_none()
+            if task and task.status == TaskStatus.cancelled:
+                return
 
             # 保存结果
             task.raw_output = str(result_data)
@@ -111,7 +128,7 @@ async def run_analysis(task_id: int, data_source_id: int, ai_config_id: int, db_
             async with async_session() as db:
                 result = await db.execute(select(AnalysisTask).where(AnalysisTask.id == task_id))
                 task = result.scalar_one_or_none()
-                if task:
+                if task and task.status != TaskStatus.cancelled:
                     task.status = TaskStatus.failed
                     task.error_message = str(e)
                     await db.commit()
@@ -192,4 +209,29 @@ async def get_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    return task
+
+
+@router.post("/{task_id}/cancel", response_model=TaskResponse)
+async def cancel_task(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(AnalysisTask).join(Project).where(
+            AnalysisTask.id == task_id,
+            Project.user_id == current_user.id
+        )
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    if task.status not in [TaskStatus.pending, TaskStatus.running]:
+        raise HTTPException(status_code=400, detail="只能取消待处理或运行中的任务")
+
+    task.status = TaskStatus.cancelled
+    await db.commit()
+    await db.refresh(task)
     return task

@@ -33,13 +33,15 @@ class Token(BaseModel):
 # AI配置相关
 class AIConfigCreate(BaseModel):
     model_name: str
-    api_key: Optional[str] = None
+    model_id: Optional[str] = None
+    api_key: str  # 创建时必须提供 API Key
     api_endpoint: Optional[str] = None
 
 
 class AIConfigUpdate(BaseModel):
     model_name: Optional[str] = None
-    api_key: Optional[str] = None
+    model_id: Optional[str] = None
+    api_key: Optional[str] = None  # 更新时可选，留空表示不修改
     api_endpoint: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -48,6 +50,7 @@ class AIConfigResponse(BaseModel):
     id: int
     user_id: int
     model_name: str
+    model_id: Optional[str]
     api_key: Optional[str]
     api_endpoint: Optional[str]
     is_active: bool

@@ -28,6 +28,7 @@ async def create_ai_config(
     config = AIConfig(
         user_id=current_user.id,
         model_name=config_data.model_name,
+        model_id=config_data.model_id,
         api_key=config_data.api_key,
         api_endpoint=config_data.api_endpoint
     )
@@ -51,9 +52,13 @@ async def update_ai_config(
     if not config:
         raise HTTPException(status_code=404, detail="配置不存在")
 
+    # model_name 是必填字段，更新时必须提供
     if config_data.model_name is not None:
         config.model_name = config_data.model_name
-    if config_data.api_key is not None:
+    if config_data.model_id is not None:
+        config.model_id = config_data.model_id
+    # 只有当 api_key 明确提供时才更新（前端编辑时留空表示不修改）
+    if config_data.api_key is not None and config_data.api_key != '':
         config.api_key = config_data.api_key
     if config_data.api_endpoint is not None:
         config.api_endpoint = config_data.api_endpoint

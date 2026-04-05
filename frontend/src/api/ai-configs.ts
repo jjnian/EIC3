@@ -4,6 +4,7 @@ export interface AIConfig {
   id: number
   user_id: number
   model_name: string
+  model_id?: string
   api_key: string
   api_endpoint?: string
   is_active: boolean
@@ -12,6 +13,7 @@ export interface AIConfig {
 
 export interface CreateAIConfigParams {
   model_name: string
+  model_id?: string
   api_key: string
   api_endpoint?: string
 }
