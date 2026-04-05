@@ -63,8 +63,8 @@ async def analyze_content(
         model_id=ai_config.model_id
     )
 
-    prompt = DEFAULT_PROMPT.format(content_type=content_type_final)
     try:
+        prompt = DEFAULT_PROMPT.format(content_type=content_type_final)
         result_data = await adapter.analyze(analysis_content, content_type_final, prompt)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"模型请求失败：{str(e)}")
