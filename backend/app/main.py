@@ -10,7 +10,8 @@ from app.routers import (
     data_sources_router,
     tasks_router,
     graph_router,
-    analyze_router
+    analyze_router,
+    chat_router
 )
 
 
@@ -49,6 +50,7 @@ app.include_router(data_sources_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
 app.include_router(analyze_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
 
 
 @app.get("/")

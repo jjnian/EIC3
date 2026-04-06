@@ -21,7 +21,7 @@
           :key="item.id"
           class="menu-item"
           :class="{ active: activeMenu === item.id }"
-          @click="activeMenu = item.id"
+          @click="handleMenuClick(item.id)"
         >
           <span class="menu-icon" v-html="item.icon"></span>
           <span class="menu-label">{{ item.label }}</span>
@@ -281,7 +281,11 @@ const menuItems = [
     label: '数据血缘',
     icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M14.5 10.5L17 7M9.5 13.5L7 16M14.5 13.5L17 16M9.5 10.5L7 7"/></svg>'
   },
-  // 后续可添加更多菜单
+  {
+    id: 'chat',
+    label: '对话分析',
+    icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>'
+  },
 ]
 
 const activeMenu = ref('lineage')
@@ -524,6 +528,14 @@ const saveSelectedModel = () => {
 const logout = () => {
   localStorage.removeItem('token')
   router.push('/login')
+}
+
+const handleMenuClick = (menuId: string) => {
+  if (menuId === 'chat') {
+    router.push('/chat')
+  } else {
+    activeMenu.value = menuId
+  }
 }
 </script>
 
